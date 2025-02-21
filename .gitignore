@@ -1,0 +1,6 @@
+# C
+noise-sources/build
+
+# Python
+env/
+test/__pycache__/
