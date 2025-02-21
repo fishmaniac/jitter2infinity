@@ -1,2 +1,2 @@
-wsl --distribution arch -- ./build.sh
+wsl -- ./build.sh
 py test\main.py
