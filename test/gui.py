@@ -3,6 +3,7 @@ from tkinter import ttk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 import numpy as np
+from scipy.stats import entropy
 from typing import List
 from ffi import FFI
 
@@ -37,6 +38,21 @@ class GraphTypeComboBox(ttk.Combobox):
         )
 
 
+class MetricTypeListbox(tk.Listbox):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, selectmode=tk.MULTIPLE, exportselection=False, *args, **kwargs)
+        metrics = [
+            "Average",
+            "Min-Entropy",
+            "Shannon Entropy"
+        ]
+        for metric in metrics:
+            self.insert(tk.END, metric)
+
+    def get_selected_metrics(self):
+        return [self.get(i) for i in self.curselection()]
+
+
 class GraphCanvas(tk.Canvas):
     def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
@@ -69,6 +85,24 @@ class GraphCanvas(tk.Canvas):
             self.yview_scroll(-1, "units")
 
 
+class IterationsEntryBox(tk.Frame):
+    def __init__(self, parent, *args, **kwargs):
+        super().__init__(parent, *args, **kwargs)
+
+        self.label = ttk.Label(self, text="Iterations:")
+        self.label.pack(pady=5)
+
+        self.iterations_var = tk.StringVar()
+        self.entry = ttk.Entry(self, textvariable=self.iterations_var)
+        self.entry.pack(pady=5)
+
+    def get_iterations(self):
+        try:
+            return int(self.iterations_var.get())
+        except ValueError:
+            return 1
+
+
 class GUI:
     def __init__(self, ffi: FFI, operations: dict):
         self.ffi = ffi
@@ -78,10 +112,11 @@ class GUI:
         self.root.title("Jitter Analysis")
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
         self.root.geometry("800x600")
-        self.root.state("zoomed")
+        self.root.state("normal")
 
         self.operation_var = tk.StringVar()
         self.graph_type_var = tk.StringVar()
+        self.metric_type_var = tk.StringVar()
 
         self.setup_widgets()
         self.root.mainloop()
@@ -109,6 +144,12 @@ class GUI:
                 )
         self.graph_type_combobox.pack(pady=10)
 
+        self.metric_type_listbox = MetricTypeListbox(button_frame, height=4)
+        self.metric_type_listbox.pack(pady=10)
+
+        self.iterations_entry_box = IterationsEntryBox(button_frame)
+        self.iterations_entry_box.pack(pady=5)
+
         self.add_graph_button = ttk.Button(
                 button_frame,
                 text="Add Graph",
@@ -128,20 +169,26 @@ class GUI:
         self.canvas.bind_all("<Button-4>", self.canvas.on_mouse_wheel)
         self.canvas.bind_all("<Button-5>", self.canvas.on_mouse_wheel)
 
-    def plot_data(self, data: List[int], op_name: str, graph_type: str):
+    def plot_data(
+        self,
+        data: List[int],
+        op_name: str,
+        graph_type: str,
+        metric_values: dict,
+    ):
         indices = np.arange(len(data))
         values = [float(i) for i in data]
 
         fig, ax = plt.subplots(figsize=(8, 4))
 
         label = 'Execution time'
-        color = 'fuschia'
+        color = 'blue'
         if graph_type == "Line":
             ax.plot(
                 indices,
                 values,
                 label=label,
-                color=color
+                color=color,
             )
         elif graph_type == "Bar":
             ax.bar(
@@ -156,7 +203,8 @@ class GUI:
                 values,
                 label=label,
                 color=color,
-                s=10
+                s=10,
+                alpha=0.5,
             )
         elif graph_type == "Histogram":
             ax.hist(
@@ -166,7 +214,6 @@ class GUI:
                 color=color,
                 alpha=0.7
             )
-            ax.set_xlabel('Time difference in nanoseconds')
             ax.set_ylabel('Frequency')
             ax.set_title(f'Histogram of Timing Differences for {op_name}')
         elif graph_type == "Boxplot":
@@ -176,7 +223,6 @@ class GUI:
                 vert=False,
                 flierprops=dict(marker='o', color='red', markersize=3),
             )
-            ax.set_xlabel('Time difference in nanoseconds')
             ax.set_title(f'Boxplot of Timing Differences for {op_name}')
         elif graph_type == "Rolling Average":
             rolling_avg = np.convolve(
@@ -191,16 +237,40 @@ class GUI:
                 color=color
             )
 
+        for metric, value in metric_values.items():
+            ax.axhline(y=value, color='red', linestyle='--', label=f'{metric}: {value:.2f}')
+            ax.annotate(
+                f"{metric}: {value:.2f}",
+                xy=(0, value),
+                xytext=(10, value + 10),
+                textcoords="offset points",
+                fontsize=10,
+                color='red',
+                arrowprops=dict(arrowstyle="->", color='red')
+            )
+
+
         ax.set_xlabel('Data Point')
-        ax.set_ylabel('Time difference in nanoseconds')
+        ax.set_ylabel('Difference in CPU ticks')
         ax.set_title(f'Timing difference of operation {op_name}')
         ax.legend()
 
         return fig
 
-    def add_graph(self, data: List[int], op_name: str, graph_type: str):
+    def add_graph(
+        self,
+        data: List[int],
+        op_name: str,
+        graph_type: str,
+        metric_values: dict,
+    ):
         graph_frame = self.canvas.add_graph_frame()
-        fig = self.plot_data(data, op_name, graph_type)
+        fig = self.plot_data(
+            data,
+            op_name,
+            graph_type,
+            metric_values
+        )
 
         fig_canvas = FigureCanvasTkAgg(fig, master=graph_frame)
         fig_canvas.draw()
@@ -220,17 +290,53 @@ class GUI:
     def remove_graph(self, graph_frame):
         graph_frame.destroy()
 
+    def calculate_shannon_entropy(self, data):
+        values, counts = np.unique(data, return_counts=True)
+        probabilities = counts / counts.sum()
+
+        shannon_entropy = entropy(probabilities, base=2)
+
+        return shannon_entropy
+
+    def calculate_min_entropy(self, data):
+        values, counts = np.unique(data, return_counts=True)
+        probabilities = counts / counts.sum()
+
+        min_entropy = -np.log2(np.max(probabilities))
+
+        return min_entropy
+
     def on_add_graph(self):
+        # Collect variables from UI elements
         selected_operation_name = self.operation_var.get()
         selected_graph_type = self.graph_type_var.get()
+        selected_metrics = self.metric_type_listbox.get_selected_metrics()
+        iterations = self.iterations_entry_box.get_iterations()
 
-        if selected_operation_name and selected_graph_type:
-            selected_operation = next(
-                    op for op in self.operations.values()
-                    if op.name == selected_operation_name
-                    )
-            data, name = selected_operation.run(self.ffi)
-            self.add_graph(data, name, selected_graph_type)
+        # Get operation object
+        selected_operation = next(
+            op for op in self.operations.values()
+            if op.name == selected_operation_name
+        )
+
+        # Call to C lib to perform selected operation
+        data, name = selected_operation.run(
+            self.ffi.lib.get_ticks_diff,
+            iterations=iterations
+        )
+
+        # Compute selected metrics
+        metric_values = {}
+        for metric in selected_metrics:
+            if metric == "Average":
+                metric_values[metric] = np.average(data)
+            elif metric == "Min-Entropy":
+                metric_values[metric] = self.calculate_min_entropy(data)
+            elif metric == "Shannon Entropy":
+                metric_values[metric] = self.calculate_shannon_entropy(data)
+
+        # Pass multiple metrics to the graph
+        self.add_graph(data, name, selected_graph_type, metric_values)
 
     def on_close(self):
         self.root.quit()

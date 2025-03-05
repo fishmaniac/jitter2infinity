@@ -2,5 +2,5 @@
 noise-sources/build
 
 # Python
-env/
+env*/
 test/__pycache__/
