@@ -32,29 +32,5 @@ def main():
     GUI(ffi=ffi, operations=operations)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-
-# def check_duplicates(data):
-#     map = {}
-#     duplicates = 0
-#     len = 0
-#     for i in data:
-#         len += 1
-#         if i in map:
-#             duplicates += 1
-#             map[i] += 1
-#         else:
-#             map[i] = 0
-#     print(f"Duplicates: {duplicates} / {len} = {duplicates/len * 100:.6f} %")
-#
-#
-# def read_file(path):
-#     with open(path, 'r') as f:
-#         for line in f:
-#             yield line.strip()
-#
-# file = "noise-sources/data.dat"
-# data = list(read_file(file))
-#
-# check_duplicates(data)

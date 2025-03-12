@@ -15,11 +15,11 @@ def get_lib():
         lib_path = abspath('./noise-sources/build/jitter2infinitylib.so')
     else:
         raise OSError(
-            f"Unknown platform {current_platform}, unable to link ffi."
+            f'Unknown platform {current_platform}, unable to link ffi.'
         )
 
     if not path.isfile(lib_path):
-        raise FileNotFoundError(f"Library not found at path: {lib_path}")
+        raise FileNotFoundError(f'Library not found at path: {lib_path}')
 
     return lib_path
 

@@ -38,8 +38,6 @@ uint64_t get_ticks() {
 
 #endif
 
-
-
 uint64_t get_time_diff(void (*delay_op)(void *)) {
 	int data = 0x123;
 	struct timespec ts;
