@@ -31,15 +31,15 @@ uint64_t get_time(struct timespec *ts) {
 }
 
 uint64_t get_ticks() {
-	uint64_t ticks;
-	asm volatile("rdtsc" : "=A"(ticks));
-	return ticks;
+	uint32_t low, high;
+	asm volatile("rdtsc" : "=a"(low), "=d"(high));
+	return ((uint64_t)high << 32) | low;
 }
 
 #endif
 
-uint64_t get_time_diff(void (*delay_op)(void *)) {
-	int data = 0x123;
+uint64_t get_time_diff(void (*delay_op)(uint64_t *)) {
+	uint64_t data = 0x123;
 	struct timespec ts;
 
 	uint64_t ts0 = get_time(&ts);
@@ -51,8 +51,8 @@ uint64_t get_time_diff(void (*delay_op)(void *)) {
 	return ts1 - ts0;
 }
 
-uint64_t get_ticks_diff(void (*delay_op)(void *)) {
-	int data = 0x123;
+uint64_t get_ticks_diff(void (*delay_op)(uint64_t *)) {
+	uint64_t data = 0x123;
 	struct timespec ts;
 
 	uint64_t ts0 = get_ticks();

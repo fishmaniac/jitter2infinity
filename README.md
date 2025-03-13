@@ -12,6 +12,7 @@ The jitter analysis includes statistical methods to assess the uniformity and ra
 ```sh
 ├── build.sh
 ├── clean.sh
+├── LICENSE
 ├── noise-sources
 │   ├── build
 │   │   ├── jitter2infinitylib.dll
@@ -70,13 +71,12 @@ This will create the required `jitter2infinitylib.so` in the `noise-sources/buil
 
 ### Windows (via WSL)
 
-Run the `build_wsl.ps1` PowerShell script to build the required Windows DLL via WSL. Make sure to have the proper WSL environment set up, including MinGW, before running:
+Run the `wsl -- ./build_wsl.ps1` PowerShell script to build the required Windows DLL via WSL. Make sure to have the proper WSL environment set up, including MinGW, before running:
 ```powershell
-.\build_wsl.ps1
+wsl -- ./build_wsl.ps1
 
 # If you need to manually build the library, you can use MinGW as follows:
-
-x86_64-w64-mingw32-gcc -shared -o jitter2infinitylib.dll noise-sources/operations.c noise-sources/timer.c
+x86_64-w64-mingw32-gcc -O0 -shared -o jitter2infinitylib.dll noise-sources/operations.c noise-sources/timer.c
 ```
 
 This will create the required `jitter2infinitylib.dll` in the `noise-sources/build` directory.
