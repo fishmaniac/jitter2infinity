@@ -4,7 +4,20 @@ from enum import Enum, EnumMeta, unique
 
 
 class Analysis:
-    def chi_square(data):
+    def remove_outliers_iqr(data):
+        data = np.array(data)
+        Q1 = np.percentile(data, 25)
+        Q3 = np.percentile(data, 75)
+
+        IQR = Q3 - Q1
+
+        lower_bound = Q1 - 1.5 * IQR
+        upper_bound = Q3 + 1.5 * IQR
+
+        mask = (data >= lower_bound) & (data <= upper_bound)
+        return data[mask]
+
+    def calculate_chi_square(data):
         # Bin the jitter values into frequency counts
         num_bins = len(set(data)) # Unique jitter values determine bins
         observed_freq, bin_edges = np.histogram(data, bins=num_bins)
@@ -49,6 +62,25 @@ class Analysis:
 
         return min_entropy
 
+    def calculate_max_entropy(data):
+        # Maybe log2(n^l), n = size, l = bits in each point
+        return np.log2(len(data))
+
+    def calculate_most_common_value(data):
+        values, counts = np.unique(data, return_counts=True)
+        probabilities = counts / counts.sum()
+        most_common_prob = np.max(probabilities)
+
+        upper_bound = most_common_prob + 2.576 * np.sqrt(
+            (most_common_prob * (1 - most_common_prob))
+            / (len(data) - 1)
+        )
+
+        most_common_value = min(1, upper_bound)
+        min_entropy_estimate = -np.log2(most_common_value)
+
+        return min_entropy_estimate
+
 
 class MetricTypeMeta(EnumMeta):
     def __getitem__(self, metric_name: str):
@@ -60,9 +92,26 @@ class MetricTypeMeta(EnumMeta):
 
 @unique
 class MetricType(Enum, metaclass=MetricTypeMeta):
-    Min_Entropy = ('Min Entropy', Analysis.calculate_min_entropy)
-    Shannon_Entropy = ('Shannon Entropy', Analysis.calculate_shannon_entropy)
-    Chi_Square = ('Chi Square', Analysis.chi_square)
+    Min_Entropy = (
+        'Min Entropy',
+        Analysis.calculate_min_entropy
+    )
+    MostCommonValue = (
+        'Most Common Value',
+        Analysis.calculate_most_common_value
+    )
+    Shannon_Entropy = (
+        'Shannon Entropy',
+        Analysis.calculate_shannon_entropy
+    )
+    Chi_Square = (
+        'Chi Square',
+        Analysis.calculate_chi_square
+    )
+    MaxEntropy = (
+        'Max Entropy',
+        Analysis.calculate_max_entropy
+    )
 
     def __init__(self, metric_name: str, func):
         self.metric_name = metric_name

@@ -20,9 +20,48 @@ def build():
 
     gcc = 'gcc'
     mingw = 'x86_64-w64-mingw32-gcc'
-    flags = ['-shared', '-fpic', '-fno-strict-aliasing', '-fno-inline']
+    flags = [
+        '-shared',
+        '-fpic',
+        '-fno-strict-aliasing',
+        '-fno-inline',
+    ]
+    trace_flags = [
+        '-DTRACEPOINTS',
+        # '-I/usr/src/linux-headers-*/include',
+    ]
+    # Linux only
+    jitter_flags = [
+        '-DJENT',
+        '-ljitterentropy',
+    ]
+    jitter_entropy_flags_used = [
+        '-fwrapv',
+        '--param',
+        'ssp-buffer-size=4',
+        '-fvisibility=hidden',
+        '-fPIE',
+        '-Wcast-align',
+        '-Wmissing-field-initializers',
+        '-Wshadow',
+        '-Wswitch-enum',
+        '-Wextra',
+        '-Wall',
+        '-pedantic',
+        '-fPIC',
+        '-O0',
+        '-fwrapv',
+        '-Wconversion',
+        '-DJENT_CONF_ENABLE_INTERNAL_TIMER',
+        '-fstack-protector-strong',
+    ]
+
     optimization_levels = ['-O0', '-O1', '-O2', '-O3', '-Ofast', '-Og', '-Os']
-    source_files = ['noise-sources/timer.c', 'noise-sources/operations.c']
+    source_files = [
+        'noise-sources/timer.c',
+        'noise-sources/operations.c',
+        'noise-sources/algorithms.c'
+    ]
 
     try:
         os.mkdir(build_dir)
@@ -52,7 +91,7 @@ def build():
                 mingw_cmd = ['wsl', '--'] + mingw_cmd
 
             futures.append(executor.submit(compile, gcc_cmd))
-            futures.append(executor.submit(compile, mingw_cmd))
+            # futures.append(executor.submit(compile, mingw_cmd))
 
         for future in futures:
             future.result()
