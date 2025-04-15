@@ -97,12 +97,15 @@ class OperationType(Enum, metaclass=OperationTypeMeta):
         self.measure_cdef = measure_cdef
         self.operation_name = operation_name
 
-    def run(self, ffi: FFI, iterations=100):
+    def run(self, ffi: FFI, iterations=100, flush=False):
         time_diffs = []
         for i in range(0, iterations):
             ffi_func = getattr(ffi.lib, self.operation_cdef)
 
             diff = ffi.lib.get_ticks_diff(ffi_func)
             time_diffs.append(diff)
+            if flush:
+                print("flushing...")
+                ffi.lib.flush_cache(ffi_func)
 
         return time_diffs

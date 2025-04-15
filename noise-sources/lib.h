@@ -33,6 +33,7 @@ uint64_t get_time_diff(void (*delay_op)(uint64_t *));
 uint64_t get_ticks_diff(void (*delay_op)(uint64_t *));
 
 // operations.c
+void flush_cache(void *addr);
 void cubed_op(uint64_t *data);
 void timespec_clock_op(uint64_t *data);
 void clock_print_op(uint64_t *data);

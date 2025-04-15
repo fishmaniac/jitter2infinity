@@ -7,6 +7,7 @@ def main():
     cdef = """
         uint64_t get_time_diff(void (*delay_op)(uint64_t *));
         uint64_t get_ticks_diff(void (*delay_op)(uint64_t *));
+        void flush_cache(void *addr);
         void cubed_op(uint64_t *data);
         void timespec_clock_op(uint64_t *data);
         void clock_print_op(uint64_t *data);
@@ -18,7 +19,6 @@ def main():
         void graph_color_op(uint64_t *data);
         void long_loop_op(uint64_t *data);
         void rdtsc_op(uint64_t *data);
-
         uint64_t jitter_entropy_op(uint64_t *data);
         """
 

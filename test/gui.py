@@ -8,6 +8,11 @@ from enum import Enum, EnumMeta, unique
 from collections import Counter
 import csv
 import time
+import threading
+import queue
+import subprocess
+import os
+import re
 
 from operation import OptimizationLevel, OperationType
 from analysis import MetricType, Analysis
@@ -55,6 +60,7 @@ class RemoveOutliersCheckbox(tk.Checkbutton):
     def get(self):
         return self.remove_outliers_var.get()
 
+
 class RemoveLegendCheckbox(tk.Checkbutton):
     def __init__(self, parent, *args, **kwargs):
         self.remove_legend_var = tk.BooleanVar()
@@ -65,6 +71,16 @@ class RemoveLegendCheckbox(tk.Checkbutton):
     def get(self):
         return self.remove_legend_var.get()
 
+
+class AttackCheckbox(tk.Checkbutton):
+    def __init__(self, parent, *args, **kwargs):
+        self.attack_var = tk.BooleanVar()
+        self.attack_var.set(False)
+
+        super().__init__(parent, variable=self.attack_var, text='Cache attack', *args, **kwargs)
+
+    def get(self):
+        return self.attack_var.get()
 
 
 class IterationsEntryBox(tk.Frame):
@@ -216,8 +232,8 @@ class GUI:
         self.root.protocol('WM_DELETE_WINDOW', self.on_close)
         self.root.geometry('800x600')
         self.root.state('normal')
-        self.root.configure(bg='#2e2e2e')
-        self.root.tk_setPalette(background='#2e2e2e', foreground='#f0f0f0')
+        # self.root.configure(bg='#2e2e2e')
+        # self.root.tk_setPalette(background='#2e2e2e', foreground='#f0f0f0')
 
         self.ffi_dict = ffi_dict
         self.operation_var = tk.StringVar()
@@ -225,15 +241,16 @@ class GUI:
         self.metric_type_var = tk.StringVar()
 
         self.setup_widgets()
+
         self.root.mainloop()
 
     def setup_widgets(self):
         self.paned_window = tk.PanedWindow(self.root, orient=tk.HORIZONTAL)
         self.paned_window.pack(fill=tk.BOTH, expand=True)
         self.button_frame = tk.Frame(self.paned_window)
-        self.paned_window.add(self.button_frame, width=150)
+        self.paned_window.add(self.button_frame)
         self.graph_frame = tk.Frame(self.paned_window)
-        self.paned_window.add(self.graph_frame, width=100)
+        self.paned_window.add(self.graph_frame)
 
         self.operation_combobox = OperationComboBox(self.button_frame, textvariable=self.operation_var)
         self.operation_combobox.pack(pady=10)
@@ -273,6 +290,16 @@ class GUI:
                 )
         self.close_button.pack(pady=10)
 
+        self.attack_checkbox = AttackCheckbox(self.button_frame, height=2)
+        self.attack_checkbox.pack(pady=5)
+
+        self.cache_stats_queue = queue.Queue()
+        self.cache_label = ttk.Label(self.button_frame, text="Cache Stats: N/A")
+        self.cache_label.pack(pady=10)
+
+        self.start_cache_monitor_thread()
+        self.update_cache_label()
+
         self.canvas = GraphCanvas(self.graph_frame)
         self.canvas.bind_all('<MouseWheel>', self.canvas.on_mouse_wheel)
         self.canvas.bind_all('<Button-4>', self.canvas.on_mouse_wheel)
@@ -303,6 +330,7 @@ class GUI:
                         row.append('')
                 writer.writerow(row)
 
+
     def on_add_graph(self):
         selected_operation_name = self.operation_var.get()
         selected_graph_type = self.graph_type_var.get()
@@ -311,42 +339,77 @@ class GUI:
         iterations = self.iterations_entry_box.get_iterations()
         graph = GraphType[selected_graph_type]
 
-        data = []
-        print('Selected: ', selected_optimizations)
-        for optimization_level in selected_optimizations:
-            operation = OperationType[selected_operation_name]
-            ffi = self.ffi_dict[optimization_level]
+        def run_operations():
+            data = []
+            for optimization_level in selected_optimizations:
+                operation = OperationType[selected_operation_name]
+                ffi = self.ffi_dict[optimization_level]
 
-            # Run selected operation
-            time_diffs = operation.run(ffi, iterations)
+                # Run selected operation
+                time_diffs = operation.run(
+                    ffi,
+                    iterations,
+                    self.attack_checkbox.get()
+                )
 
-            # Remove outliers
-            if self.remove_outliers_checkbox.get():
-                print("Removing outliers...")
-                time_diffs = Analysis.remove_outliers_iqr(time_diffs)
+                if self.remove_outliers_checkbox.get():
+                    time_diffs = Analysis.remove_outliers_iqr(time_diffs)
 
-            metrics = []
-            for selected_metric in selected_metrics:
-                metric = MetricType[selected_metric]
-                metrics.append({
-                    'name': metric.metric_name,
-                    'func': metric.func(time_diffs)
+                metrics = []
+                for selected_metric in selected_metrics:
+                    metric = MetricType[selected_metric]
+                    metrics.append({
+                        'name': metric.metric_name,
+                        'func': metric.func(time_diffs)
                     })
 
-            data.append({
-                'time_diff': time_diffs,
-                'metrics': metrics,
-                'graph': graph,
-                'optimization_level': OptimizationLevel[optimization_level]
+                data.append({
+                    'time_diff': time_diffs,
+                    'metrics': metrics,
+                    'graph': graph,
+                    'optimization_level': OptimizationLevel[optimization_level]
                 })
 
-        self.save_graph_to_csv(
-                data,
-                ''.join((
-                    f'''graph-{selected_operation_name}-{selected_graph_type}
-                    -{time.time_ns()}.csv''').split())
-                )
-        self.add_graph(data, selected_operation_name)
+            self.root.after(0, lambda: self.add_graph(data, selected_operation_name))
+
+        threading.Thread(target=run_operations, daemon=True).start()
+
+        # data = []
+        # print('Selected: ', selected_optimizations)
+        # for optimization_level in selected_optimizations:
+        #     operation = OperationType[selected_operation_name]
+        #     ffi = self.ffi_dict[optimization_level]
+        #
+        #     # Run selected operation
+        #     time_diffs = operation.run(ffi, iterations)
+        #
+        #     # Remove outliers
+        #     if self.remove_outliers_checkbox.get():
+        #         print("Removing outliers...")
+        #         time_diffs = Analysis.remove_outliers_iqr(time_diffs)
+        #
+        #     metrics = []
+        #     for selected_metric in selected_metrics:
+        #         metric = MetricType[selected_metric]
+        #         metrics.append({
+        #             'name': metric.metric_name,
+        #             'func': metric.func(time_diffs)
+        #             })
+        #
+        #     data.append({
+        #         'time_diff': time_diffs,
+        #         'metrics': metrics,
+        #         'graph': graph,
+        #         'optimization_level': OptimizationLevel[optimization_level]
+        #         })
+        #
+        # # self.save_graph_to_csv(
+        # #         data,
+        # #         ''.join((
+        # #             f'''graph-{selected_operation_name}-{selected_graph_type}
+        # #             -{time.time_ns()}.csv''').split())
+        # #         )
+        # self.add_graph(data, selected_operation_name)
 
     def add_graph(self, data, selected_operation_name: str):
         graph_frame = self.canvas.add_graph_frame()
@@ -418,3 +481,62 @@ class GUI:
     def on_close(self):
         self.root.quit()
         self.root.destroy()
+
+    def start_cache_monitor_thread(self):
+        def monitor():
+            pid = os.getpid()
+            perf_cmd = [
+                'perf', 'stat',
+                '-I', '100',
+                '-e', 'L1-dcache-loads,L1-dcache-load-misses,L1-icache-loads,L1-icache-load-misses',
+                '-p', str(pid)
+            ]
+
+            try:
+                process = subprocess.Popen(
+                    perf_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True
+                )
+
+                for line in process.stdout:
+                    if 'cache' in line:
+                        print(f"Perf Output: {line.strip()}")
+                        self.cache_stats_queue.put(line.strip())
+
+            except Exception as e:
+                print(f"Error: {e}")
+                self.cache_stats_queue.put(f"Error: {e}")
+            finally:
+                process.terminate()
+
+        threading.Thread(target=monitor, daemon=True).start()
+
+    def update_cache_label(self):
+        try:
+            l1d_miss_rate = "N/A"
+            l1i_miss_rate = "N/A"
+
+            while not self.cache_stats_queue.empty():
+                line = self.cache_stats_queue.get_nowait()
+
+                if "L1-dcache-load-misses" in line and "%" in line:
+                    match = re.search(r"#\s+([\d.]+)%", line)
+                    if match:
+                        l1d_miss_rate = match.group(1) + "%"
+                elif "L1-icache-load-misses" in line and "%" in line:
+                    match = re.search(r"#\s+([\d.]+)%", line)
+                    if match:
+                        l1i_miss_rate = match.group(1) + "%"
+
+            display = (
+                f"L1 DCache Miss Rate: {l1d_miss_rate}\n"
+                f"L1 ICache Miss Rate: {l1i_miss_rate}"
+            )
+            self.cache_label.config(text=f"Cache Miss Rates:\n{display}")
+
+        except queue.Empty:
+            pass
+
+        self.root.after(100, self.update_cache_label)

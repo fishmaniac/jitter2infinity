@@ -3,6 +3,14 @@
 #include <stdio.h>
 #include <limits.h>
 
+void flush_cache(void *addr) {
+    __asm__ volatile (
+        "clflush (%0)"
+        :
+        : "r" (addr)
+        : "memory"
+    );
+}
 
 #ifdef JENT
 #include <jitterentropy-base-user.h>
